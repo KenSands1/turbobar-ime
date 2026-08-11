@@ -82,8 +82,26 @@ abstract class LifecycleInputMethodService :
         )
     }
 
+    /** THE ACTUAL FIX for the "ViewTreeLifecycleOwner not found" crash:
+     *  Android's IME window wraps whatever view onCreateInputView() returns
+     *  inside its OWN internal window decoration (the "parentPanel" seen in
+     *  the crash log) — a separate part of the view hierarchy from anything
+     *  attachToImeLifecycle() directly touched. Compose resolves its parent
+     *  composition context by walking up from wherever it's ACTUALLY
+     *  attached in the real window, which can land outside what was tagged.
+     *  Setting the same owners directly on the window's decor view covers
+     *  that gap. Called from onStartInputView(), since that's the first
+     *  point the real window is guaranteed to exist. */
+    protected fun attachOwnersToWindowDecorView() {
+        val decorView = window?.window?.decorView ?: return
+        decorView.setViewTreeLifecycleOwner(this)
+        decorView.setViewTreeViewModelStoreOwner(this)
+        decorView.setViewTreeSavedStateRegistryOwner(this)
+    }
+
     override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
         super.onStartInputView(info, restarting)
+        attachOwnersToWindowDecorView()
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
     }
@@ -100,4 +118,5 @@ abstract class LifecycleInputMethodService :
         super.onDestroy()
     }
 }
+
 
