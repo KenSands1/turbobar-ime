@@ -183,15 +183,15 @@ class TurboBarIME : LifecycleInputMethodService() {
 
     private fun supportsImageInsert(): Boolean {
         val info = currentInputEditorInfo ?: return false
-        val mimeTypes = EditorInfo.getContentMimeTypes(info)
-        return mimeTypes.any { it.startsWith("image/") }
+        val mimeTypes = info.contentMimeTypes
+        return mimeTypes?.any { it.startsWith("image/") } ?: false
     }
 
     private fun commitQrImage(payload: String): Boolean {
         val ic = currentInputConnection ?: return false
         val editorInfo = currentInputEditorInfo ?: return false
-        val mimeTypes = EditorInfo.getContentMimeTypes(editorInfo)
-        val imageMime = mimeTypes.firstOrNull { it.startsWith("image/") } ?: return false
+        val mimeTypes = editorInfo.contentMimeTypes
+        val imageMime = mimeTypes?.firstOrNull { it.startsWith("image/") } ?: return false
 
         return try {
             val bitmap: Bitmap = QrGenerator.generate(payload)
@@ -217,9 +217,6 @@ class TurboBarIME : LifecycleInputMethodService() {
         }
     }
 
-    override fun onDestroyInputView() {
-        super.onDestroyInputView()
-    }
-
     private data class DialogRequest(val entry: PrefixEntry?)
 }
+
