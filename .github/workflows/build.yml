@@ -1,0 +1,56 @@
+name: Build Turbo Bar APK
+
+# Two ways to trigger a build:
+#   1. Push to main — builds automatically on every commit.
+#   2. Manually — go to the "Actions" tab on GitHub, pick this workflow,
+#      click "Run workflow". Useful if you want to build without pushing
+#      new code, or re-run after fixing something locally.
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      # NOTE: this project has no committed Gradle wrapper (gradlew /
+      # gradle-wrapper.jar) — that jar is a compiled binary I had no safe
+      # way to produce without Gradle already installed somewhere. Instead,
+      # this installs Gradle directly on the runner and calls `gradle`
+      # rather than `./gradlew`. If you later generate a real wrapper
+      # locally (Android Studio can do this via
+      # File > ... > Generate Gradle Wrapper, or `gradle wrapper` from a
+      # local Gradle install), switch these two steps back to the more
+      # common `./gradlew assembleDebug` pattern — either works.
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.7
+
+      - name: Build debug APK
+        run: gradle assembleDebug --no-daemon
+        # If this fails with a Gradle/AGP version-compatibility error,
+        # check the Android Gradle Plugin release notes for the Gradle
+        # version AGP 8.5.0 (set in build.gradle.kts) actually expects —
+        # I picked 8.7 as a reasonable match but haven't been able to
+        # verify it against a real build.
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: turbobar-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
