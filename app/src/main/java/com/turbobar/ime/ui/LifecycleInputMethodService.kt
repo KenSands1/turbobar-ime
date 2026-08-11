@@ -4,7 +4,6 @@ import android.inputmethodservice.InputMethodService
 import android.view.inputmethod.EditorInfo
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
-import androidx.compose.ui.platform.setViewCompositionStrategy
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
@@ -101,3 +100,4 @@ abstract class LifecycleInputMethodService :
         super.onDestroy()
     }
 }
+
