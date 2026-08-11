@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+
 package com.turbobar.ime.ui
 
 import androidx.compose.foundation.background
@@ -224,3 +226,4 @@ private fun RowScope.BottomKey(
         Text(label, color = fg, fontSize = 12.sp, fontWeight = FontWeight.Medium)
     }
 }
+
