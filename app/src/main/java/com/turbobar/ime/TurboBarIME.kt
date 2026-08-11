@@ -79,6 +79,7 @@ class TurboBarIME : LifecycleInputMethodService() {
     override fun onCreateInputView(): View {
         val composeView = ComposeView(this)
         composeView.attachToImeLifecycle()
+        attachOwnersToWindowDecorView() // belt-and-suspenders — see comment in LifecycleInputMethodService
 
         composeView.setContent {
             var dialogState by remember { mutableStateOf<DialogRequest?>(null) }
