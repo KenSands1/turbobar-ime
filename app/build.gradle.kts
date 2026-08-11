@@ -1,7 +1,6 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
-    id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.devtools.ksp")
 }
 
@@ -25,6 +24,14 @@ android {
 
     buildFeatures {
         compose = true
+    }
+
+    // Kotlin 1.9.24 uses this to enable Compose, NOT the
+    // org.jetbrains.kotlin.plugin.compose plugin (that's a Kotlin 2.0+
+    // mechanism only) — this version number pairs specifically with
+    // Kotlin 1.9.24 per the official Compose-to-Kotlin compatibility map.
+    composeOptions {
+        kotlinCompilerExtensionVersion = "1.5.14"
     }
 
     compileOptions {
@@ -65,3 +72,5 @@ dependencies {
     // just depend on a mature, battle-tested implementation directly.
     implementation("com.google.zxing:core:3.5.3")
 }
+
+
