@@ -26,6 +26,19 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
+      # Without this, every run generates a NEW random debug signing key
+      # (GitHub Actions runners are fresh/ephemeral machines each time, so
+      # there's never a pre-existing keystore for Gradle to reuse) — meaning
+      # every APK is signed differently and Android refuses to "update" over
+      # the previous install ("App not installed"). Caching the keystore
+      # file itself means the first run generates one and every run after
+      # reuses that exact same key, so normal installs-over-installs work.
+      - name: Cache debug keystore
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: debug-keystore-v1
+
       # NOTE: this project has no committed Gradle wrapper (gradlew /
       # gradle-wrapper.jar) — that jar is a compiled binary I had no safe
       # way to produce without Gradle already installed somewhere. Instead,
