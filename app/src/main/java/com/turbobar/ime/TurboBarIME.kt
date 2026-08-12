@@ -8,6 +8,7 @@ import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
 import android.view.inputmethod.InputContentInfo
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -32,7 +33,7 @@ import com.turbobar.ime.ui.KeyboardCallbacks
 import com.turbobar.ime.ui.KeyboardScreen
 import com.turbobar.ime.ui.KeyboardState
 import com.turbobar.ime.ui.LifecycleInputMethodService
-import com.turbobar.ime.ui.MacroDialog
+import com.turbobar.ime.ui.MacroOverlay
 import kotlinx.coroutines.launch
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -86,72 +87,72 @@ class TurboBarIME : LifecycleInputMethodService() {
             val currentPrefix by keyboardState.prefix.collectAsState()
 
             MaterialTheme {
-                Surface(modifier = Modifier.fillMaxWidth()) {
-                    KeyboardScreen(
-                        state = keyboardState,
-                        imageInsertSupported = supportsImageInsert(),
-                        callbacks = KeyboardCallbacks(
-                            onLetter = { c ->
-                                val cased = if (keyboardState.shiftMode.value != com.turbobar.ime.ui.ShiftMode.NONE)
-                                    c.uppercaseChar() else c
-                                currentInputConnection?.commitText(cased.toString(), 1)
-                                keyboardState.onLetterTyped(c)
-                            },
-                            onSpace = {
-                                currentInputConnection?.commitText(" ", 1)
-                                keyboardState.onWordBoundary()
-                            },
-                            onBackspace = {
-                                currentInputConnection?.deleteSurroundingText(1, 0)
-                                keyboardState.onBackspace()
-                            },
-                            onShift = { keyboardState.cycleShift() },
-                            onSlotTap = { entry -> commitSlot(entry) },
-                            onSlotLongPress = { _, entry ->
-                                dialogState = DialogRequest(entry)
-                            }
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    Surface(modifier = Modifier.fillMaxWidth()) {
+                        KeyboardScreen(
+                            state = keyboardState,
+                            imageInsertSupported = supportsImageInsert(),
+                            callbacks = KeyboardCallbacks(
+                                onLetter = { c ->
+                                    val cased = if (keyboardState.shiftMode.value != com.turbobar.ime.ui.ShiftMode.NONE)
+                                        c.uppercaseChar() else c
+                                    currentInputConnection?.commitText(cased.toString(), 1)
+                                    keyboardState.onLetterTyped(c)
+                                },
+                                onSpace = {
+                                    currentInputConnection?.commitText(" ", 1)
+                                    keyboardState.onWordBoundary()
+                                },
+                                onSymbol = { s ->
+                                    currentInputConnection?.commitText(s, 1)
+                                    keyboardState.onWordBoundary()
+                                },
+                                onBackspace = {
+                                    currentInputConnection?.deleteSurroundingText(1, 0)
+                                    keyboardState.onBackspace()
+                                },
+                                onShift = { keyboardState.cycleShift() },
+                                onSlotTap = { entry -> commitSlot(entry) },
+                                onSlotLongPress = { _, entry ->
+                                    dialogState = DialogRequest(entry)
+                                }
+                            )
                         )
-                    )
-                }
+                    }
 
-                // NOTE: showing a real AlertDialog/system Dialog from inside an
-                // IME's input view window is a known grey area — IME windows
-                // are a special window type and dialogs sometimes need extra
-                // handling (e.g. setting the dialog window type explicitly) to
-                // display correctly. This is exactly the kind of thing I can't
-                // verify without compiling and running on a device. If the
-                // dialog doesn't appear correctly, the fallback is replacing
-                // MacroDialog's AlertDialog internals with a plain in-line
-                // Composable overlay drawn as part of the same ComposeView
-                // instead of a separate system Dialog window.
-                dialogState?.let { req ->
-                    MacroDialog(
-                        editing = req.entry?.takeIf { it.kind == EntryKind.MACRO },
-                        defaultPrefix = currentPrefix,
-                        defaultText = "", // a native build can read real draft text via
-                                          // InputConnection.getTextBeforeCursor() here —
-                                          // deferred in this pass, see KeyboardState's
-                                          // limitation note
-                        onSave = { result ->
-                            lifecycleScope.launch {
-                                keyboardState.saveMacro(
-                                    prefix = result.prefix,
-                                    label = result.label,
-                                    text = result.text,
-                                    insertMode = result.insertMode,
-                                    editingId = req.entry?.id
-                                )
-                            }
-                            dialogState = null
-                        },
-                        onReset = req.entry?.let { entry ->
-                            {
-                                lifecycleScope.launch { keyboardState.resetEntry(entry.id) }
+                    // Layered ON TOP of the keyboard within the SAME Box/window,
+                    // not a separate system dialog — see MacroOverlay's own doc
+                    // comment for why (a real AlertDialog took the whole keyboard
+                    // down on first device test instead of showing anything).
+                    dialogState?.let { req ->
+                        MacroOverlay(
+                            editing = req.entry?.takeIf { it.kind == EntryKind.MACRO },
+                            defaultPrefix = currentPrefix,
+                            defaultText = "", // a native build can read real draft text via
+                                              // InputConnection.getTextBeforeCursor() here —
+                                              // deferred in this pass, see KeyboardState's
+                                              // limitation note
+                            onSave = { result ->
+                                lifecycleScope.launch {
+                                    keyboardState.saveMacro(
+                                        prefix = result.prefix,
+                                        label = result.label,
+                                        text = result.text,
+                                        insertMode = result.insertMode,
+                                        editingId = req.entry?.id
+                                    )
+                                }
                                 dialogState = null
-                            }
-                        },
-                        onCancel = { dialogState = null }
-                    )
+                            },
+                            onReset = req.entry?.let { entry ->
+                                {
+                                    lifecycleScope.launch { keyboardState.resetEntry(entry.id) }
+                                    dialogState = null
+                                }
+                            },
+                            onCancel = { dialogState = null }
+                        )
+                    }
                 }
             }
         }
