@@ -88,6 +88,7 @@ class KeyboardState(private val dao: PrefixDao) : ViewModel() {
         insertMode: com.turbobar.ime.data.InsertMode,
         editingId: Long? = null
     ) {
+        val cappedPrefix = prefix.take(2) // hard limit — see MacroDialog.kt for why
         viewModelScope.launch {
             if (editingId != null) {
                 // editing: remove the old row, then insert fresh — same
@@ -95,10 +96,10 @@ class KeyboardState(private val dao: PrefixDao) : ViewModel() {
                 // correctly handles a changed trigger prefix too
                 dao.delete(editingId)
             }
-            val nextSlot = (dao.maxSlotOrderForPrefix(prefix) ?: -1) + 1
+            val nextSlot = (dao.maxSlotOrderForPrefix(cappedPrefix) ?: -1) + 1
             dao.insert(
                 PrefixEntry(
-                    prefix = prefix,
+                    prefix = cappedPrefix,
                     slotOrder = nextSlot.coerceAtMost(5),
                     kind = com.turbobar.ime.data.EntryKind.MACRO,
                     label = label,
