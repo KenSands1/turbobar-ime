@@ -31,6 +31,7 @@ private val KeyBorder = Color(0xFFDDE3E1)
 
 data class KeyboardCallbacks(
     val onLetter: (Char) -> Unit,
+    val onSymbol: (String) -> Unit, // digits/punctuation — treated as a word boundary, not part of a word prefix
     val onSpace: () -> Unit,
     val onBackspace: () -> Unit,
     val onShift: () -> Unit,
@@ -46,6 +47,7 @@ fun KeyboardScreen(
 ) {
     val slots by state.slots.collectAsState()
     val shiftMode by state.shiftMode.collectAsState()
+    var symbolsShown by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -61,13 +63,19 @@ fun KeyboardScreen(
             onLongPress = callbacks.onSlotLongPress
         )
         Spacer(Modifier.height(6.dp))
-        QwertyRows(shiftMode = shiftMode, onLetter = callbacks.onLetter)
+        if (symbolsShown) {
+            SymbolRows(onSymbol = callbacks.onSymbol)
+        } else {
+            QwertyRows(shiftMode = shiftMode, onLetter = callbacks.onLetter)
+        }
         Spacer(Modifier.height(4.dp))
         BottomRow(
             shiftMode = shiftMode,
+            symbolsShown = symbolsShown,
             onShift = callbacks.onShift,
             onSpace = callbacks.onSpace,
-            onBackspace = callbacks.onBackspace
+            onBackspace = callbacks.onBackspace,
+            onToggleSymbols = { symbolsShown = !symbolsShown }
         )
     }
 }
@@ -138,6 +146,43 @@ private fun MacroRow(
 }
 
 @Composable
+private fun SymbolRows(onSymbol: (String) -> Unit) {
+    val row1 = "1234567890"
+    val row2 = "-/:;()$&@\""
+    val row3 = ".,?!'"
+
+    @Composable
+    fun SymRow(chars: String, horizontalPadding: Dp = 0.dp) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = horizontalPadding),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            for (c in chars) {
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(42.dp)
+                        .clip(RoundedCornerShape(7.dp))
+                        .background(KeyBg)
+                        .combinedClickable(onClick = { onSymbol(c.toString()) }, onLongClick = {}),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(c.toString(), fontSize = 15.sp)
+                }
+            }
+        }
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        SymRow(row1)
+        SymRow(row2)
+        SymRow(row3, horizontalPadding = 48.dp)
+    }
+}
+
+@Composable
 private fun QwertyRows(shiftMode: ShiftMode, onLetter: (Char) -> Unit) {
     val row1 = "qwertyuiop"
     val row2 = "asdfghjkl"
@@ -181,20 +226,29 @@ private fun QwertyRows(shiftMode: ShiftMode, onLetter: (Char) -> Unit) {
 @Composable
 private fun BottomRow(
     shiftMode: ShiftMode,
+    symbolsShown: Boolean,
     onShift: () -> Unit,
     onSpace: () -> Unit,
-    onBackspace: () -> Unit
+    onBackspace: () -> Unit,
+    onToggleSymbols: () -> Unit
 ) {
     Row(
         modifier = Modifier.fillMaxWidth().height(42.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        BottomKey(
-            label = if (shiftMode == ShiftMode.CAPS) "⇪" else "⇧",
-            weight = 1.3f,
-            highlighted = shiftMode != ShiftMode.NONE,
-            onClick = onShift
-        )
+        if (symbolsShown) {
+            BottomKey(label = "ABC", weight = 1.3f, onClick = onToggleSymbols)
+        } else {
+            BottomKey(
+                label = if (shiftMode == ShiftMode.CAPS) "⇪" else "⇧",
+                weight = 1.3f,
+                highlighted = shiftMode != ShiftMode.NONE,
+                onClick = onShift
+            )
+        }
+        if (!symbolsShown) {
+            BottomKey(label = "123", weight = 1.1f, onClick = onToggleSymbols)
+        }
         BottomKey(label = "SPACE", weight = 5f, onClick = onSpace)
         BottomKey(label = "⌫", weight = 1.3f, danger = true, onClick = onBackspace)
     }
