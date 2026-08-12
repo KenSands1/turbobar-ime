@@ -51,7 +51,7 @@ fun MacroOverlay(
     onReset: (() -> Unit)?, // non-null only when editing an existing macro
     onCancel: () -> Unit
 ) {
-    var prefix by remember { mutableStateOf(editing?.prefix ?: defaultPrefix) }
+    var prefix by remember { mutableStateOf((editing?.prefix ?: defaultPrefix).take(2)) }
     var label by remember { mutableStateOf(editing?.let { if (it.label == it.resolvedText.trim()) "" else it.label } ?: "") }
     var text by remember { mutableStateOf(editing?.resolvedText ?: defaultText) }
     var insertMode by remember { mutableStateOf(editing?.insertMode ?: InsertMode.TEXT) }
