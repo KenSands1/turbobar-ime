@@ -82,8 +82,8 @@ fun MacroOverlay(
 
             OutlinedTextField(
                 value = prefix,
-                onValueChange = { prefix = it.lowercase() },
-                label = { Text("Trigger prefix") },
+                onValueChange = { if (it.length <= 2) prefix = it.lowercase() },
+                label = { Text("Trigger prefix (max 2 letters)") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
             )
