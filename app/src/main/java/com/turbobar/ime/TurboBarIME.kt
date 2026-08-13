@@ -1,6 +1,7 @@
 package com.turbobar.ime
 
 import android.content.ClipDescription
+import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Build
@@ -8,15 +9,9 @@ import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
 import android.view.inputmethod.InputContentInfo
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ComposeView
 import androidx.core.content.FileProvider
@@ -33,7 +28,7 @@ import com.turbobar.ime.ui.KeyboardCallbacks
 import com.turbobar.ime.ui.KeyboardScreen
 import com.turbobar.ime.ui.KeyboardState
 import com.turbobar.ime.ui.LifecycleInputMethodService
-import com.turbobar.ime.ui.MacroOverlay
+import com.turbobar.ime.ui.MacroEditorActivity
 import kotlinx.coroutines.launch
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -47,12 +42,14 @@ import java.io.FileOutputStream
  * replaces the earlier static JSON lookup table entirely, per your direction
  * to move the database work up ahead of the SEED submission.
  *
+ * Macro creation/editing is NOT drawn inline in this keyboard's own view —
+ * see MacroEditorActivity for why: an IME can't pop itself up to let you
+ * type into its own overlay, since it IS the active keyboard. Long-pressing
+ * a slot launches that separate Activity instead.
+ *
  * REMINDER: none of this has been compiled. I have no Kotlin/Android
  * toolchain in my environment — everything here is a careful first draft
- * built from well-established patterns, not verified working code. Treat
- * Android Studio's first build attempt as the real test, and expect to fix
- * real errors, especially around Compose-in-IME specifics (see the note on
- * AlertDialog below) that I can't be fully certain about without compiling.
+ * built from well-established patterns, not verified working code.
  */
 class TurboBarIME : LifecycleInputMethodService() {
 
@@ -83,81 +80,52 @@ class TurboBarIME : LifecycleInputMethodService() {
         attachOwnersToWindowDecorView() // belt-and-suspenders — see comment in LifecycleInputMethodService
 
         composeView.setContent {
-            var dialogState by remember { mutableStateOf<DialogRequest?>(null) }
-            val currentPrefix by keyboardState.prefix.collectAsState()
-
             MaterialTheme {
-                Box(modifier = Modifier.fillMaxWidth()) {
-                    Surface(modifier = Modifier.fillMaxWidth()) {
-                        KeyboardScreen(
-                            state = keyboardState,
-                            imageInsertSupported = supportsImageInsert(),
-                            callbacks = KeyboardCallbacks(
-                                onLetter = { c ->
-                                    val cased = if (keyboardState.shiftMode.value != com.turbobar.ime.ui.ShiftMode.NONE)
-                                        c.uppercaseChar() else c
-                                    currentInputConnection?.commitText(cased.toString(), 1)
-                                    keyboardState.onLetterTyped(c)
-                                },
-                                onSpace = {
-                                    currentInputConnection?.commitText(" ", 1)
-                                    keyboardState.onWordBoundary()
-                                },
-                                onSymbol = { s ->
-                                    currentInputConnection?.commitText(s, 1)
-                                    keyboardState.onWordBoundary()
-                                },
-                                onBackspace = {
-                                    currentInputConnection?.deleteSurroundingText(1, 0)
-                                    keyboardState.onBackspace()
-                                },
-                                onShift = { keyboardState.cycleShift() },
-                                onSlotTap = { entry -> commitSlot(entry) },
-                                onSlotLongPress = { _, entry ->
-                                    dialogState = DialogRequest(entry)
-                                }
-                            )
-                        )
-                    }
-
-                    // Layered ON TOP of the keyboard within the SAME Box/window,
-                    // not a separate system dialog — see MacroOverlay's own doc
-                    // comment for why (a real AlertDialog took the whole keyboard
-                    // down on first device test instead of showing anything).
-                    dialogState?.let { req ->
-                        MacroOverlay(
-                            editing = req.entry?.takeIf { it.kind == EntryKind.MACRO },
-                            defaultPrefix = currentPrefix,
-                            defaultText = "", // a native build can read real draft text via
-                                              // InputConnection.getTextBeforeCursor() here —
-                                              // deferred in this pass, see KeyboardState's
-                                              // limitation note
-                            onSave = { result ->
-                                lifecycleScope.launch {
-                                    keyboardState.saveMacro(
-                                        prefix = result.prefix,
-                                        label = result.label,
-                                        text = result.text,
-                                        insertMode = result.insertMode,
-                                        editingId = req.entry?.id
-                                    )
-                                }
-                                dialogState = null
+                Surface(modifier = Modifier.fillMaxWidth()) {
+                    KeyboardScreen(
+                        state = keyboardState,
+                        imageInsertSupported = supportsImageInsert(),
+                        callbacks = KeyboardCallbacks(
+                            onLetter = { c ->
+                                val cased = if (keyboardState.shiftMode.value != com.turbobar.ime.ui.ShiftMode.NONE)
+                                    c.uppercaseChar() else c
+                                currentInputConnection?.commitText(cased.toString(), 1)
+                                keyboardState.onLetterTyped(c)
                             },
-                            onReset = req.entry?.let { entry ->
-                                {
-                                    lifecycleScope.launch { keyboardState.resetEntry(entry.id) }
-                                    dialogState = null
-                                }
+                            onSpace = {
+                                currentInputConnection?.commitText(" ", 1)
+                                keyboardState.onWordBoundary()
                             },
-                            onCancel = { dialogState = null }
+                            onSymbol = { s ->
+                                currentInputConnection?.commitText(s, 1)
+                                keyboardState.onWordBoundary()
+                            },
+                            onBackspace = {
+                                currentInputConnection?.deleteSurroundingText(1, 0)
+                                keyboardState.onBackspace()
+                            },
+                            onShift = { keyboardState.cycleShift() },
+                            onSlotTap = { entry -> commitSlot(entry) },
+                            onSlotLongPress = { _, entry ->
+                                launchMacroEditor(entry)
+                            }
                         )
-                    }
+                    )
                 }
             }
         }
 
         return composeView
+    }
+
+    private fun launchMacroEditor(entry: PrefixEntry?) {
+        val editingId = entry?.takeIf { it.kind == EntryKind.MACRO }?.id
+        val intent = Intent(this, MacroEditorActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            if (editingId != null) putExtra(MacroEditorActivity.EXTRA_EDITING_ID, editingId)
+            putExtra(MacroEditorActivity.EXTRA_DEFAULT_PREFIX, keyboardState.prefix.value)
+        }
+        startActivity(intent)
     }
 
     private fun commitSlot(entry: PrefixEntry) {
@@ -218,7 +186,5 @@ class TurboBarIME : LifecycleInputMethodService() {
             false
         }
     }
-
-    private data class DialogRequest(val entry: PrefixEntry?)
 }
 
