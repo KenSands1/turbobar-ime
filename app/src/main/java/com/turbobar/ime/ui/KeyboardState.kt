@@ -8,7 +8,9 @@ import com.turbobar.ime.data.resolvedText
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -33,13 +35,27 @@ enum class ShiftMode { NONE, TITLE, CAPS }
 class KeyboardState(private val dao: PrefixDao) : ViewModel() {
 
     private val _prefix = MutableStateFlow("")
+    // Deliberately NOT capped at 2 characters — commitSlot() needs the true
+    // full typed length to correctly delete everything typed before
+    // inserting the tapped word, even once you're past the point where
+    // anything new could match (see `slots` below for where the cap
+    // actually happens).
     val prefix: StateFlow<String> = _prefix
 
     private val _shiftMode = MutableStateFlow(ShiftMode.NONE)
     val shiftMode: StateFlow<ShiftMode> = _shiftMode
 
+    // Query key is capped at the first 2 characters — once macros were also
+    // capped at 2-letter prefixes, nothing can ever match past that point
+    // anyway, so instead of the bar going blank once you keep typing, it
+    // keeps showing (and keeps letting you tap) whatever matched at your
+    // first 2 letters. distinctUntilChanged avoids needlessly re-running
+    // the same query again on every extra keystroke once the capped key
+    // stops changing (e.g. "wh" -> "whe" -> "when" all map to "wh").
     val slots: StateFlow<List<PrefixEntry?>> = _prefix
-        .flatMapLatest { p -> dao.observeSlotsForPrefix(p) }
+        .map { it.take(2) }
+        .distinctUntilChanged()
+        .flatMapLatest { key -> dao.observeSlotsForPrefix(key) }
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
