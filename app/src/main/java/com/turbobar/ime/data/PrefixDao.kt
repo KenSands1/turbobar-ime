@@ -19,6 +19,9 @@ interface PrefixDao {
     @Query("SELECT * FROM prefix_entries WHERE prefix = :prefix ORDER BY slotOrder ASC LIMIT 6")
     suspend fun getSlotsForPrefix(prefix: String): List<PrefixEntry>
 
+    @Query("SELECT * FROM prefix_entries WHERE id = :id LIMIT 1")
+    suspend fun getById(id: Long): PrefixEntry?
+
     @Query("SELECT COUNT(*) FROM prefix_entries WHERE kind = 'MACRO'")
     fun observeMacroCount(): Flow<Int>
 
